@@ -1,0 +1,10 @@
+ssh linuxuser@server_ip
+ssh-copy-id -i cert_path linuxuser@server_ip
+ssh linuxuser@server_ip 'echo iptables-persistent iptables-persistent/autosave_v4 boolean true | sudo debconf-set-selections'
+ssh linuxuser@server_ip 'echo iptables-persistent iptables-persistent/autosave_v6 boolean true | sudo debconf-set-selections'
+ssh linuxuser@server_ip 'sudo DEBIAN_FRONTEND=noninteractive apt update && sudo apt upgrade -y && sudo apt install -yq iptables iptables-persistent fail2ban'
+scp files/firewall.sh linuxuser@server_ip:
+ssh linuxuser@server_ip 'sudo chmod +x firewall.sh'
+ssh linuxuser@server_ip 'sudo ./firewall.sh script_mode'
+ssh linuxuser@server_ip 'sudo iptables -L -n'
+ssh linuxuser@server_ip 'sudo iptables-save | sudo tee /etc/iptables/rules.v4 && sudo ip6tables-save | sudo tee /etc/iptables/rules.v6'

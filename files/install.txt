@@ -1,0 +1,18 @@
+ssh linuxuser@proxy_ip
+ssh-copy-id -i cert_path linuxuser@proxy_ip
+ssh linuxuser@proxy_ip 'sudo hostnamectl set-hostname otsname-pID'
+ssh linuxuser@proxy_ip 'echo iptables-persistent iptables-persistent/autosave_v4 boolean false | sudo debconf-set-selections'
+ssh linuxuser@proxy_ip 'echo iptables-persistent iptables-persistent/autosave_v6 boolean false | sudo debconf-set-selections'
+ssh linuxuser@proxy_ip 'sudo DEBIAN_FRONTEND=noninteractive apt update && sudo apt upgrade -y && sudo apt install -yq fail2ban htop nload tcpdump mc zip unzip git screen screenie net-tools moreutils traceroute iptables iptables-persistent haproxy && sudo systemctl stop ufw && sudo systemctl disable ufw && sudo apt remove -y ufw'
+scp files/haproxy.cfg linuxuser@proxy_ip:
+scp files/firewall.sh linuxuser@proxy_ip:
+ssh linuxuser@proxy_ip 'sudo mv haproxy.cfg /etc/haproxy/haproxy.cfg'
+ssh linuxuser@proxy_ip 'sudo systemctl restart haproxy'
+ssh linuxuser@proxy_ip 'sudo chmod +x firewall.sh'
+ssh linuxuser@proxy_ip 'sudo ./firewall.sh proxy'
+ssh linuxuser@proxy_ip 'sudo iptables -L -n'
+ssh linuxuser@proxy_ip 'sudo iptables-save | sudo tee /etc/iptables/rules.v4 && sudo ip6tables-save | sudo tee /etc/iptables/rules.v6 && sudo reboot'
+ssh linuxuser@proxy_ip 'sudo uptime'
+ssh linuxuser@proxy_ip 'sudo iptables -L -n'
+ssh linuxuser@proxy_ip 'sudo netstat -nalp | grep LISTEN | grep haproxy'
+ssh linuxuser@proxy_ip 'cat /proc/`sudo netstat -nalp | grep haproxy | sed "s/.*[[:space:]]\([0-9]*\)\/.*/\1/" | head -1`/limits | grep "Max open files"'
