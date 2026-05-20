@@ -295,71 +295,521 @@ if (isset($_POST['generate'])) {
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Proxy configuration generator</title>
+    <style>
+        :root {
+            --bg: #0f1419;
+            --surface: #1a1f26;
+            --border: #2d333b;
+            --text: #e6edf3;
+            --muted: #8b949e;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --danger: #f85149;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            padding: 14px 16px;
+            font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+            font-size: 14px;
+            line-height: 1.35;
+            color: var(--text);
+            background: var(--bg);
+        }
+        h1 {
+            margin: 0 0 10px;
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .toolbar-hint {
+            color: var(--muted);
+            font-size: 13px;
+            font-style: italic;
+        }
+        hr {
+            border: none;
+            border-top: 1px solid var(--border);
+            margin: 12px 0;
+        }
+        label {
+            display: block;
+            margin-bottom: 4px;
+            color: var(--muted);
+            font-size: 13px;
+        }
+        .field { margin-bottom: 10px; }
+        input[type="text"],
+        input[type="number"],
+        textarea {
+            width: 100%;
+            max-width: 420px;
+            padding: 6px 10px;
+            font-size: 14px;
+            color: var(--text);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+        }
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+        }
+        textarea { resize: vertical; min-height: 52px; }
+        button, input[type="submit"] {
+            padding: 6px 14px;
+            font-size: 14px;
+            color: #fff;
+            background: var(--accent);
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        button:hover, input[type="submit"]:hover {
+            background: var(--accent-hover);
+        }
+        button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .ports-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 10px;
+        }
+        .ports-row > div label { margin-bottom: 2px; }
+        .ports-row input[type="number"],
+        .ports-row input[type="text"] {
+            max-width: none;
+        }
+        .ports-row .port-narrow {
+            width: calc(6ch + 3.5rem);
+            min-width: calc(6ch + 3.5rem);
+        }
+        .ports-row .port-range { width: 96px; }
+        .ports-row .port-cert { width: 200px; max-width: 100%; }
+        .hint {
+            margin: 4px 0 10px;
+            color: var(--muted);
+            font-size: 12px;
+        }
+        .proxy-list {
+            max-width: 520px;
+            max-height: 280px;
+            overflow-y: auto;
+            margin-bottom: 8px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--surface);
+        }
+        .proxy-list-empty {
+            padding: 12px;
+            color: var(--muted);
+            font-size: 13px;
+            text-align: center;
+        }
+        .proxy-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 8px;
+            border-bottom: 1px solid var(--border);
+        }
+        .proxy-row:last-child { border-bottom: none; }
+        .proxy-row:hover { background: #21262d; }
+        .proxy-row.proxy-ip-first-dup {
+            background: rgba(234, 179, 8, 0.22);
+        }
+        .proxy-row.proxy-ip-first-dup:hover {
+            background: rgba(234, 179, 8, 0.32);
+        }
+        .proxy-row.proxy-ip-dup {
+            background: rgba(248, 81, 73, 0.22);
+        }
+        .proxy-row.proxy-ip-dup:hover {
+            background: rgba(248, 81, 73, 0.32);
+        }
+        .proxy-index {
+            flex-shrink: 0;
+            width: 22px;
+            color: var(--muted);
+            font-size: 12px;
+            text-align: right;
+        }
+        .proxy-value {
+            flex: 1;
+            min-width: 0;
+            padding: 4px 6px;
+            cursor: pointer;
+            border-radius: 4px;
+            word-break: break-all;
+        }
+        .proxy-value:hover { background: rgba(59, 130, 246, 0.1); }
+        .proxy-row input.proxy-edit {
+            flex: 1;
+            min-width: 0;
+            max-width: none;
+            margin: 0;
+        }
+        .proxy-actions {
+            display: flex;
+            flex-shrink: 0;
+            gap: 2px;
+        }
+        .proxy-actions button {
+            padding: 2px 8px;
+            font-size: 13px;
+            line-height: 1.2;
+            background: var(--border);
+            color: var(--text);
+        }
+        .proxy-actions button:hover { background: #484f58; }
+        .proxy-actions .btn-remove:hover { background: var(--danger); color: #fff; }
+        .proxy-add-row {
+            display: flex;
+            gap: 8px;
+            max-width: 520px;
+            margin-bottom: 4px;
+        }
+        .proxy-add-row input {
+            flex: 1;
+            max-width: none;
+        }
+        a { color: var(--accent); }
+        a:hover { color: var(--accent-hover); }
+        .footer { margin-top: 12px; color: var(--muted); font-size: 13px; }
+    </style>
 </head>
 <body>
 
-<div>
-    <button onclick="saveToJSON()" style="margin-right: 10px;">Save to JSON</button>
+<h1>Proxy configuration generator</h1>
+
+<div class="toolbar">
+    <button type="button" onclick="saveToJSON()">Save to JSON</button>
     <input type="file" id="json_file_input" accept=".json" style="display: none;" onchange="loadFromJSON(event)">
-    <button onclick="document.getElementById('json_file_input').click()">Load from JSON</button>
-    <i>You can drop JSON config file anywhere on website, to make it load config.</i>
+    <button type="button" onclick="document.getElementById('json_file_input').click()">Load from JSON</button>
+    <span class="toolbar-hint">You can drop JSON config file anywhere on website, to make it load config.</span>
 </div>
 
-<hr style="margin: 20px 0;">
+<hr>
 
-<form method="post">
-    <label for="ots_name">OTS name (for proxy hostname):</label><br>
-    <input id="ots_name" name="ots_name" size="40" placeholder="myots"/><br><br>
+<form id="config_form" method="post">
+    <div class="field">
+        <label for="ots_name">OTS name (for proxy hostname):</label>
+        <input id="ots_name" name="ots_name" type="text" placeholder="myots"/>
+    </div>
 
-    <label for="ots_ip">OTS IP (or user@ip):</label><br>
-    <input id="ots_ip" name="ots_ip" size="40" placeholder="ubuntu@1.1.1.1"/><br><br>
+    <div class="field">
+        <label for="ots_ip">OTS IP (or user@ip):</label>
+        <input id="ots_ip" name="ots_ip" type="text" placeholder="ubuntu@1.1.1.1"/>
+    </div>
 
-    <label for="other_ips">Other IPs with unlimited access (ex. www server to let it connect to database) (or user@ip):</label><br>
-    <textarea id="other_ips" name="other_ips" rows="2" cols="40" placeholder="ubuntu@2.2.2.2"></textarea><br><br>
+    <div class="field">
+        <label for="other_ips">Other IPs with unlimited access (ex. www server to let it connect to database) (or user@ip):</label>
+        <textarea id="other_ips" name="other_ips" rows="2" placeholder="ubuntu@2.2.2.2"></textarea>
+    </div>
 
-    <label for="proxy_ips">Proxy IPs (with username, if it's different for some IPs):</label><br>
-    <textarea id="proxy_ips" name="proxy_ips" rows="15" cols="40" placeholder="ubuntu@1.2.3.4"></textarea><br>
-    (Only the first proxy on the list proxies "OTS status port". You can use that IP to add server to otservlist etc.)<br><br>
+    <div class="field">
+        <label for="proxy_ips_add">Proxy IPs (with username, if it's different for some IPs):</label>
+        <div id="proxy_ips_list" class="proxy-list" role="list"></div>
+        <div class="proxy-add-row">
+            <input type="text" id="proxy_ips_add" placeholder="ubuntu@1.2.3.4" autocomplete="off">
+            <button type="button" id="proxy_ips_add_btn">Add</button>
+        </div>
+        <input type="hidden" id="proxy_ips" name="proxy_ips" value="">
+        <p class="hint">Only the first proxy on the list proxies "OTS status port". You can use that IP to add server to otservlist etc. Click an entry to edit.</p>
+    </div>
 
-    <label for="linux_username">Proxy default Linux username:</label><br>
-    <input id="linux_username" name="linux_username" size="40" value="ubuntu"/><br><br>
+    <div class="field">
+        <label for="linux_username">Proxy default Linux username:</label>
+        <input id="linux_username" name="linux_username" type="text" value="ubuntu"/>
+    </div>
 
-    <div style="display: flex; gap: 20px; margin-bottom: 10px">
+    <div class="ports-row">
         <div>
             <label for="proxy_start_port">Proxy start port:</label>
-            <input type="number" id="proxy_start_port" name="proxy_start_port" value="6501" style="width: 50px;">
+            <input type="number" class="port-narrow" id="proxy_start_port" name="proxy_start_port" value="6501">
         </div>
         <div>
             <label for="proxy_end_port">Proxy end port:</label>
-            <input type="number" id="proxy_end_port" name="proxy_end_port" value="6509" style="width: 50px;">
+            <input type="number" class="port-narrow" id="proxy_end_port" name="proxy_end_port" value="6509">
         </div>
         <div>
             <label for="database_port">Database port:</label>
-            <input type="number" id="database_port" name="database_port" value="3306" style="width: 50px;">
+            <input type="number" class="port-narrow" id="database_port" name="database_port" value="3306">
         </div>
         <div>
             <label for="ots_status_port">OTS status port:</label>
-            <input type="number" id="ots_status_port" name="ots_status_port" value="7171" style="width: 50px;">
+            <input type="number" class="port-narrow" id="ots_status_port" name="ots_status_port" value="7171">
         </div>
         <div>
             <label for="ots_ports">OTS ports range:</label>
-            <input id="ots_ports" name="ots_ports" value="7171:7172" style="width: 90px;">
+            <input type="text" class="port-range" id="ots_ports" name="ots_ports" value="7171:7172">
         </div>
         <div>
             <label for="ssh_cert_path">SSH cert path:</label>
-            <input id="ssh_cert_path" name="ssh_cert_path" size="40" value="~/.ssh/id_rsa.pub"/>
+            <input type="text" class="port-cert" id="ssh_cert_path" name="ssh_cert_path" value="~/.ssh/id_rsa.pub"/>
         </div>
     </div>
 
     <input type="submit" name="generate" value="Generate">
 </form>
 
-<br />
-Code available on <a href="https://github.com/gesior/otcv8-proxy-config">https://github.com/gesior/otcv8-proxy-config</a>
+<p class="footer">Code available on <a href="https://github.com/gesior/otcv8-proxy-config">https://github.com/gesior/otcv8-proxy-config</a></p>
 
 <script>
+    const proxyItems = [];
+    let editingIndex = -1;
+
+    function syncProxyIpsHidden() {
+        document.getElementById('proxy_ips').value = proxyItems.join('\n');
+    }
+
+    function extractProxyIp(entry) {
+        const at = entry.lastIndexOf('@');
+        if (at !== -1) {
+            return entry.slice(at + 1).trim();
+        }
+        return entry.trim();
+    }
+
+    function getProxyDuplicateFlags() {
+        const firstIndexByIp = {};
+        const flags = proxyItems.map(function () {
+            return { isFirstDup: false, isRepeatDup: false };
+        });
+
+        proxyItems.forEach(function (value, index) {
+            const ip = extractProxyIp(value);
+            if (firstIndexByIp[ip] === undefined) {
+                firstIndexByIp[ip] = index;
+            } else {
+                flags[index].isRepeatDup = true;
+                flags[firstIndexByIp[ip]].isFirstDup = true;
+            }
+        });
+
+        return flags;
+    }
+
+    function setProxyItemsFromText(text) {
+        proxyItems.length = 0;
+        if (text) {
+            text.split('\n').forEach(function (line) {
+                line = line.trim();
+                if (line) {
+                    proxyItems.push(line);
+                }
+            });
+        }
+        editingIndex = -1;
+        renderProxyList();
+        syncProxyIpsHidden();
+    }
+
+    function renderProxyList() {
+        const container = document.getElementById('proxy_ips_list');
+        container.innerHTML = '';
+
+        if (proxyItems.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'proxy-list-empty';
+            empty.textContent = 'No proxy servers yet. Add one below.';
+            container.appendChild(empty);
+            return;
+        }
+
+        const duplicateFlags = getProxyDuplicateFlags();
+
+        proxyItems.forEach(function (value, index) {
+            const row = document.createElement('div');
+            row.className = 'proxy-row';
+            if (duplicateFlags[index].isFirstDup) {
+                row.classList.add('proxy-ip-first-dup');
+            }
+            if (duplicateFlags[index].isRepeatDup) {
+                row.classList.add('proxy-ip-dup');
+            }
+            row.setAttribute('role', 'listitem');
+
+            const num = document.createElement('span');
+            num.className = 'proxy-index';
+            num.textContent = (index + 1) + '.';
+
+            const actions = document.createElement('div');
+            actions.className = 'proxy-actions';
+
+            const btnUp = document.createElement('button');
+            btnUp.type = 'button';
+            btnUp.textContent = '\u2191';
+            btnUp.title = 'Move up';
+            btnUp.disabled = index === 0;
+            btnUp.addEventListener('click', function (e) {
+                e.stopPropagation();
+                moveProxyItem(index, -1);
+            });
+
+            const btnDown = document.createElement('button');
+            btnDown.type = 'button';
+            btnDown.textContent = '\u2193';
+            btnDown.title = 'Move down';
+            btnDown.disabled = index === proxyItems.length - 1;
+            btnDown.addEventListener('click', function (e) {
+                e.stopPropagation();
+                moveProxyItem(index, 1);
+            });
+
+            const btnRemove = document.createElement('button');
+            btnRemove.type = 'button';
+            btnRemove.className = 'btn-remove';
+            btnRemove.textContent = '\u00d7';
+            btnRemove.title = 'Remove';
+            btnRemove.addEventListener('click', function (e) {
+                e.stopPropagation();
+                removeProxyItem(index);
+            });
+
+            actions.appendChild(btnUp);
+            actions.appendChild(btnDown);
+            actions.appendChild(btnRemove);
+
+            if (editingIndex === index) {
+                const editInput = document.createElement('input');
+                editInput.type = 'text';
+                editInput.className = 'proxy-edit';
+                editInput.value = value;
+                editInput.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                });
+                editInput.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        commitEdit(index, editInput.value);
+                    } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        editingIndex = -1;
+                        renderProxyList();
+                    }
+                });
+                editInput.addEventListener('blur', function () {
+                    commitEdit(index, editInput.value);
+                });
+                row.appendChild(num);
+                row.appendChild(editInput);
+                row.appendChild(actions);
+                container.appendChild(row);
+                editInput.focus();
+                editInput.select();
+            } else {
+                const valueSpan = document.createElement('span');
+                valueSpan.className = 'proxy-value';
+                valueSpan.textContent = value;
+                valueSpan.title = 'Click to edit';
+                valueSpan.addEventListener('click', function () {
+                    editingIndex = index;
+                    renderProxyList();
+                });
+                row.appendChild(num);
+                row.appendChild(valueSpan);
+                row.appendChild(actions);
+                container.appendChild(row);
+            }
+        });
+    }
+
+    function commitEdit(index, newValue) {
+        newValue = newValue.trim();
+        if (newValue === '') {
+            editingIndex = -1;
+            renderProxyList();
+            return;
+        }
+        proxyItems[index] = newValue;
+        editingIndex = -1;
+        renderProxyList();
+        syncProxyIpsHidden();
+    }
+
+    function parseProxyIpEntries(text) {
+        return text.split(/[\s\r\n]+/).map(function (entry) {
+            return entry.trim();
+        }).filter(function (entry) {
+            return entry.length > 0;
+        });
+    }
+
+    function addProxyItem() {
+        const input = document.getElementById('proxy_ips_add');
+        const entries = parseProxyIpEntries(input.value);
+        if (entries.length === 0) {
+            return;
+        }
+        entries.forEach(function (entry) {
+            proxyItems.push(entry);
+        });
+        input.value = '';
+        editingIndex = -1;
+        renderProxyList();
+        syncProxyIpsHidden();
+        input.focus();
+    }
+
+    function removeProxyItem(index) {
+        proxyItems.splice(index, 1);
+        if (editingIndex === index) {
+            editingIndex = -1;
+        } else if (editingIndex > index) {
+            editingIndex--;
+        }
+        renderProxyList();
+        syncProxyIpsHidden();
+    }
+
+    function moveProxyItem(index, direction) {
+        const newIndex = index + direction;
+        if (newIndex < 0 || newIndex >= proxyItems.length) {
+            return;
+        }
+        const temp = proxyItems[index];
+        proxyItems[index] = proxyItems[newIndex];
+        proxyItems[newIndex] = temp;
+        if (editingIndex === index) {
+            editingIndex = newIndex;
+        } else if (editingIndex === newIndex) {
+            editingIndex = index;
+        }
+        renderProxyList();
+        syncProxyIpsHidden();
+    }
+
+    document.getElementById('proxy_ips_add_btn').addEventListener('click', addProxyItem);
+    document.getElementById('proxy_ips_add').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            addProxyItem();
+        }
+    });
+
+    document.getElementById('config_form').addEventListener('submit', function (e) {
+        syncProxyIpsHidden();
+        if (proxyItems.length === 0) {
+            e.preventDefault();
+            alert('Please add at least one proxy IP.');
+        }
+    });
+
     function saveToJSON() {
+        syncProxyIpsHidden();
         const formData = {
             ots_name: document.getElementById('ots_name').value,
             ots_ip: document.getElementById('ots_ip').value,
@@ -404,7 +854,7 @@ Code available on <a href="https://github.com/gesior/otcv8-proxy-config">https:/
                 if (formData.ots_name !== undefined) document.getElementById('ots_name').value = formData.ots_name;
                 if (formData.ots_ip !== undefined) document.getElementById('ots_ip').value = formData.ots_ip;
                 if (formData.other_ips !== undefined) document.getElementById('other_ips').value = formData.other_ips;
-                if (formData.proxy_ips !== undefined) document.getElementById('proxy_ips').value = formData.proxy_ips;
+                if (formData.proxy_ips !== undefined) setProxyItemsFromText(formData.proxy_ips);
                 if (formData.linux_username !== undefined) document.getElementById('linux_username').value = formData.linux_username;
                 if (formData.proxy_start_port !== undefined) document.getElementById('proxy_start_port').value = formData.proxy_start_port;
                 if (formData.proxy_end_port !== undefined) document.getElementById('proxy_end_port').value = formData.proxy_end_port;
@@ -422,6 +872,7 @@ Code available on <a href="https://github.com/gesior/otcv8-proxy-config">https:/
     function loadFromJSON(event) {
         const file = event.target.files[0];
         loadConfigFromFile(file);
+        event.target.value = '';
     }
 
     document.addEventListener('dragover', function(event) {
@@ -433,7 +884,7 @@ Code available on <a href="https://github.com/gesior/otcv8-proxy-config">https:/
     document.addEventListener('drop', function(event) {
         event.preventDefault();
         event.stopPropagation();
-        
+
         const files = event.dataTransfer.files;
         if (files.length > 0) {
             const file = files[0];
@@ -442,6 +893,9 @@ Code available on <a href="https://github.com/gesior/otcv8-proxy-config">https:/
             }
         }
     });
+
+    renderProxyList();
+    syncProxyIpsHidden();
 </script>
 
 </body>
