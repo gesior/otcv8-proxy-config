@@ -332,6 +332,46 @@ if (isset($_POST['generate'])) {
     ];
     $files['config.json'] = json_encode($jsonConfig, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 
+    // Generate SSH client config file for all servers
+    $sshIdentityFile = $ssh_cert_path;
+    if (substr($sshIdentityFile, -4) === '.pub') {
+        $sshIdentityFile = substr($sshIdentityFile, 0, -4);
+    }
+
+    $sshConfigServers = [];
+    $sshConfigSeenIps = [];
+
+    $sshConfigServers[] = ['ip' => $ots_ip_address, 'user' => $ots_ssh_user, 'port' => $ots_ssh_port];
+    $sshConfigSeenIps[] = $ots_ip_address;
+
+    foreach ($www_servers as $server) {
+        if (!in_array($server['ip'], $sshConfigSeenIps)) {
+            $sshConfigServers[] = ['ip' => $server['ip'], 'user' => $server['user'], 'port' => $server['port']];
+            $sshConfigSeenIps[] = $server['ip'];
+        }
+    }
+
+    foreach ($proxy_ips as $key => $proxy_ip) {
+        if (!in_array($proxy_ip, $sshConfigSeenIps)) {
+            $proxyUser = explode('@', $proxy_ips_usernames[$key])[0];
+            $sshConfigServers[] = ['ip' => $proxy_ip, 'user' => $proxyUser, 'port' => $proxy_ips_ports[$key]];
+            $sshConfigSeenIps[] = $proxy_ip;
+        }
+    }
+
+    $sshConfigLines = [];
+    foreach ($sshConfigServers as $server) {
+        $sshConfigLines[] = 'Host ' . $server['ip'];
+        $sshConfigLines[] = '    HostName ' . $server['ip'];
+        $sshConfigLines[] = '    User ' . $server['user'];
+        if ($server['port'] != 22) {
+            $sshConfigLines[] = '    Port ' . $server['port'];
+        }
+        $sshConfigLines[] = '    IdentityFile ' . $sshIdentityFile;
+        $sshConfigLines[] = '';
+    }
+    $files['ssh_client.txt'] = implode("\n", $sshConfigLines);
+
     $zipname = sha1(microtime(true)) . '.zip';
     $zip = new ZipArchive();
     if ($zip->open($zipname, ZipArchive::CREATE) !== TRUE) {
