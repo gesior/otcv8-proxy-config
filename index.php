@@ -413,6 +413,29 @@ if (isset($_POST['generate'])) {
             font-size: 13px;
         }
         .field { margin-bottom: 10px; }
+        .field-label-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 5px;
+            margin-bottom: 4px;
+            width: fit-content;
+            max-width: 100%;
+        }
+        .field-label-row label {
+            margin-bottom: 0;
+            flex: 0 0 auto;
+        }
+        .field-label-row button {
+            flex: 0 0 auto;
+            padding: 4px 10px;
+            font-size: 13px;
+            background: var(--border);
+            color: var(--text);
+        }
+        .field-label-row button:hover {
+            background: #484f58;
+        }
         input[type="text"],
         input[type="number"],
         textarea {
@@ -576,17 +599,26 @@ if (isset($_POST['generate'])) {
     </div>
 
     <div class="field">
-        <label for="ots_ip">OTS IP (or user@ip, ip:port, user@ip:port):</label>
+        <div class="field-label-row">
+            <label for="ots_ip">OTS IP (or user@ip, ip:port, user@ip:port):</label>
+            <button type="button" id="ots_random_port_btn">Random port</button>
+        </div>
         <input id="ots_ip" name="ots_ip" type="text" placeholder="ubuntu@1.1.1.1"/>
     </div>
 
     <div class="field">
-        <label for="other_ips">Other IPs with unlimited access (ex. www server to let it connect to database) (or user@ip, ip:port, user@ip:port):</label>
+        <div class="field-label-row">
+            <label for="other_ips">Other IPs with unlimited access (ex. www server to let it connect to database) (or user@ip, ip:port, user@ip:port):</label>
+            <button type="button" id="other_ips_random_port_btn">Random port</button>
+        </div>
         <textarea id="other_ips" name="other_ips" rows="2" placeholder="ubuntu@2.2.2.2"></textarea>
     </div>
 
     <div class="field">
-        <label for="proxy_ips_add">Proxy IPs (with username and/or SSH port, if different for some IPs):</label>
+        <div class="field-label-row">
+            <label for="proxy_ips_add">Proxy IPs (with username and/or SSH port, if different for some IPs):</label>
+            <button type="button" id="proxy_random_port_btn">Random port</button>
+        </div>
         <div id="proxy_ips_list" class="proxy-list" role="list"></div>
         <div class="proxy-add-row">
             <input type="text" id="proxy_ips_add" placeholder="ubuntu@1.2.3.4:22" autocomplete="off">
@@ -649,6 +681,68 @@ if (isset($_POST['generate'])) {
             return ipPart.slice(0, colon);
         }
         return ipPart;
+    }
+
+    function hasHostEntryPort(entry) {
+        const at = entry.lastIndexOf('@');
+        const hostPart = (at !== -1) ? entry.slice(at + 1).trim() : entry.trim();
+        return hostPart.indexOf(':') !== -1;
+    }
+
+    function appendPortToHostEntry(entry, port) {
+        return entry.trim() + ':' + port;
+    }
+
+    function randomSshPort(min, max) {
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    const SSH_RANDOM_PORT_MIN = 50000;
+    const SSH_RANDOM_PORT_MAX = 60000;
+
+    function assignRandomPortToOtsIp() {
+        const input = document.getElementById('ots_ip');
+        const entry = input.value.trim();
+        if (entry === '' || hasHostEntryPort(entry)) {
+            return;
+        }
+        input.value = appendPortToHostEntry(entry, randomSshPort(SSH_RANDOM_PORT_MIN, SSH_RANDOM_PORT_MAX));
+    }
+
+    function assignRandomPortsToOtherIps() {
+        const textarea = document.getElementById('other_ips');
+        const lines = textarea.value.split('\n');
+        let changed = false;
+
+        const newLines = lines.map(function (line) {
+            const trimmed = line.trim();
+            if (trimmed === '' || hasHostEntryPort(trimmed)) {
+                return line;
+            }
+            changed = true;
+            return appendPortToHostEntry(trimmed, randomSshPort(SSH_RANDOM_PORT_MIN, SSH_RANDOM_PORT_MAX));
+        });
+
+        if (changed) {
+            textarea.value = newLines.join('\n');
+        }
+    }
+
+    function assignRandomPortsToProxies() {
+        let changed = false;
+
+        proxyItems.forEach(function (entry, index) {
+            if (!hasHostEntryPort(entry)) {
+                proxyItems[index] = appendPortToHostEntry(entry, randomSshPort(SSH_RANDOM_PORT_MIN, SSH_RANDOM_PORT_MAX));
+                changed = true;
+            }
+        });
+
+        if (changed) {
+            editingIndex = -1;
+            renderProxyList();
+            syncProxyIpsHidden();
+        }
     }
 
     function getProxyDuplicateFlags() {
@@ -861,6 +955,9 @@ if (isset($_POST['generate'])) {
     }
 
     document.getElementById('proxy_ips_add_btn').addEventListener('click', addProxyItem);
+    document.getElementById('ots_random_port_btn').addEventListener('click', assignRandomPortToOtsIp);
+    document.getElementById('other_ips_random_port_btn').addEventListener('click', assignRandomPortsToOtherIps);
+    document.getElementById('proxy_random_port_btn').addEventListener('click', assignRandomPortsToProxies);
     document.getElementById('proxy_ips_add').addEventListener('keydown', function (e) {
         if (e.key === 'Enter') {
             e.preventDefault();
