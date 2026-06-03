@@ -83,6 +83,7 @@ if (isset($_POST['generate'])) {
     $ots_status_port = (int)$_POST['ots_status_port'];
     $ots_ports = $_POST['ots_ports'];
     $ssh_cert_path = $_POST['ssh_cert_path'];
+    $ws_proxy_address = isset($_POST['ws_proxy_address']) ? trim($_POST['ws_proxy_address']) : '';
 
     $required_fields = [
         'ots_name' => $ots_name,
@@ -304,8 +305,15 @@ if (isset($_POST['generate'])) {
     $otcv8LuaLines[] = 'math.randomseed(os.time())';
     $otcv8LuaLines[] = '';
     $otcv8LuaLines[] = 'vpsPort = math.random(' . $proxy_start_port . ',' . $proxy_end_port . ')';
-    foreach ($proxy_ips as $proxy_ip) {
-        $otcv8LuaLines[] = 'g_proxy.addProxy("' . $proxy_ip . '", vpsPort, 0)';
+    if ($ws_proxy_address !== '') {
+        $otcv8LuaLines[] = 'g_proxy.addProxy("' . $ws_proxy_address . '" .. vpsPort, 80, 0)';
+        foreach ($proxy_ips as $proxy_ip) {
+            $otcv8LuaLines[] = 'g_proxy.addProxy("' . $proxy_ip . '", vpsPort, 50)';
+        }
+    } else {
+        foreach ($proxy_ips as $proxy_ip) {
+            $otcv8LuaLines[] = 'g_proxy.addProxy("' . $proxy_ip . '", vpsPort, 0)';
+        }
     }
     $files['otcv8_init.lua'] = implode("\n", $otcv8LuaLines);
 
@@ -328,7 +336,8 @@ if (isset($_POST['generate'])) {
         'database_port' => $database_port,
         'ots_status_port' => $ots_status_port,
         'ots_ports' => $ots_ports,
-        'ssh_cert_path' => $ssh_cert_path
+        'ssh_cert_path' => $ssh_cert_path,
+        'ws_proxy_address' => $ws_proxy_address,
     ];
     $files['config.json'] = json_encode($jsonConfig, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 
@@ -698,6 +707,11 @@ if (isset($_POST['generate'])) {
             <label for="ssh_cert_path">SSH cert path:</label>
             <input type="text" class="port-cert" id="ssh_cert_path" name="ssh_cert_path" value="~/.ssh/id_rsa.pub"/>
         </div>
+        <div>
+            <label for="ws_proxy_address">WebSocket proxy:</label>
+            <input type="text" style="width: 50ch;" id="ws_proxy_address" name="ws_proxy_address"
+                   placeholder="ws://socket.xxx.com/?token=x" value=""/>
+        </div>
     </div>
 
     <input type="submit" name="generate" value="Generate">
@@ -1026,7 +1040,8 @@ if (isset($_POST['generate'])) {
             database_port: document.getElementById('database_port').value,
             ots_status_port: document.getElementById('ots_status_port').value,
             ots_ports: document.getElementById('ots_ports').value,
-            ssh_cert_path: document.getElementById('ssh_cert_path').value
+            ssh_cert_path: document.getElementById('ssh_cert_path').value,
+            ws_proxy_address: document.getElementById('ws_proxy_address').value
         };
 
         const now = new Date();
@@ -1067,6 +1082,7 @@ if (isset($_POST['generate'])) {
                 if (formData.ots_status_port !== undefined) document.getElementById('ots_status_port').value = formData.ots_status_port;
                 if (formData.ots_ports !== undefined) document.getElementById('ots_ports').value = formData.ots_ports;
                 if (formData.ssh_cert_path !== undefined) document.getElementById('ssh_cert_path').value = formData.ssh_cert_path;
+                if (formData.ws_proxy_address !== undefined) document.getElementById('ws_proxy_address').value = formData.ws_proxy_address;
             } catch (error) {
                 alert('Błąd podczas wczytywania pliku JSON: ' + error.message);
             }
