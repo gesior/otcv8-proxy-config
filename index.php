@@ -1,5 +1,75 @@
 <?php
 
+function parseHostEntry($entry, $defaultUser)
+{
+    $user = $defaultUser;
+    $port = 22;
+    $hostPart = $entry;
+
+    if (strpos($entry, '@') !== false) {
+        $parts = explode('@', $entry);
+        if (count($parts) !== 2) {
+            return null;
+        }
+        $user = $parts[0];
+        $hostPart = $parts[1];
+    }
+
+    if (strpos($hostPart, ':') !== false) {
+        $parts = explode(':', $hostPart);
+        if (count($parts) !== 2) {
+            return null;
+        }
+        $ip = $parts[0];
+        $port = (int) $parts[1];
+        if ($port < 1 || $port > 65535) {
+            return null;
+        }
+    } else {
+        $ip = $hostPart;
+    }
+
+    return ['user' => $user, 'ip' => $ip, 'port' => $port];
+}
+
+function addSshPortToCommands($text, $port)
+{
+    if ($port == 22) {
+        return $text;
+    }
+    $lines = explode("\n", $text);
+    foreach ($lines as &$line) {
+        if (strpos($line, 'ssh-copy-id ') === 0) {
+            $line = 'ssh-copy-id -p ' . $port . ' ' . substr($line, strlen('ssh-copy-id '));
+        } elseif (strpos($line, 'ssh ') === 0) {
+            $line = 'ssh -p ' . $port . ' ' . substr($line, strlen('ssh '));
+        } elseif (strpos($line, 'scp ') === 0) {
+            $line = 'scp -P ' . $port . ' ' . substr($line, strlen('scp '));
+        }
+    }
+    return implode("\n", $lines);
+}
+
+function generateSshPortChangePreamble($user, $ip, $port, $certPath)
+{
+    if ($port == 22) {
+        return '';
+    }
+    $userAtIp = $user . '@' . $ip;
+    $lines = [
+            '# --- Change SSH port from 22 to ' . $port . ' ---',
+            '',
+            'ssh ' . $userAtIp,
+            'ssh-copy-id -i ' . $certPath . ' ' . $userAtIp,
+            'ssh ' . $userAtIp . ' \'sudo sed -i "s/^#\\?Port .*/Port ' . $port . '/" /etc/ssh/sshd_config && sudo systemctl restart sshd\'',
+            '',
+            '# --- SSH port changed to ' . $port . ', commands below use new port ---',
+            '',
+            '',
+    ];
+    return implode("\n", $lines);
+}
+
 if (isset($_POST['generate'])) {
     $files = [];
     $ots_name = $_POST['ots_name'];
@@ -43,19 +113,14 @@ if (isset($_POST['generate'])) {
     }
 
     $ots_ip = trim($ots_ip);
-    $ots_ip_address = $ots_ip;
-    $ots_ssh_user = $linux_username;
-
-    if (strpos($ots_ip, '@') !== false) {
-        $parts = explode('@', $ots_ip);
-        if (count($parts) === 2) {
-            $ots_ssh_user = $parts[0];
-            $ots_ip_address = $parts[1];
-        } else {
-            echo "Invalid OTS IP format. Please use 'ip' or 'username@ip'";
-            exit;
-        }
+    $otsParsed = parseHostEntry($ots_ip, $linux_username);
+    if ($otsParsed === null) {
+        echo "Invalid OTS IP format. Please use 'ip', 'ip:port', 'username@ip' or 'username@ip:port'";
+        exit;
     }
+    $ots_ssh_user = $otsParsed['user'];
+    $ots_ip_address = $otsParsed['ip'];
+    $ots_ssh_port = $otsParsed['port'];
 
     $other_ips = trim($other_ips);
     $proxy_ips_input = trim($proxy_ips_input);
@@ -74,44 +139,33 @@ if (isset($_POST['generate'])) {
         if (empty($other_ip_line)) {
             continue;
         }
-        
-        $www_user = $linux_username;
-        $www_ip_address = $other_ip_line;
 
-        if (strpos($other_ip_line, '@') !== false) {
-            $parts = explode('@', $other_ip_line);
-            if (count($parts) === 2) {
-                $www_user = $parts[0];
-                $www_ip_address = $parts[1];
-            } else {
-                echo "Invalid WWW IP format. Please use 'ip' or 'username@ip'. Line: " . $other_ip_line;
-                exit;
-            }
+        $wwwParsed = parseHostEntry($other_ip_line, $linux_username);
+        if ($wwwParsed === null) {
+            echo "Invalid WWW IP format. Please use 'ip', 'ip:port', 'username@ip' or 'username@ip:port'. Line: " . $other_ip_line;
+            exit;
         }
-        $all_ips[] = $www_ip_address;
-        $www_servers[] = ['ip' => $www_ip_address, 'user' => $www_user];
+        $all_ips[] = $wwwParsed['ip'];
+        $www_servers[] = ['ip' => $wwwParsed['ip'], 'user' => $wwwParsed['user'], 'port' => $wwwParsed['port']];
     }
 
     $proxy_ips = [];
     $proxy_ips_usernames = [];
+    $proxy_ips_ports = [];
     foreach (explode("\n", $proxy_ips_input) as $proxy_ip_input) {
         $proxy_ip_input = trim($proxy_ip_input);
         if (empty($proxy_ip_input)) {
             continue;
         }
-        $proxy_ip_data = explode('@', $proxy_ip_input);
-        if (count($proxy_ip_data) === 2) {
-            $all_ips[] = $proxy_ip_data[1];
-            $proxy_ips[] = $proxy_ip_data[1];
-            $proxy_ips_usernames[] = $proxy_ip_input;
-        } elseif (count($proxy_ip_data) === 1) {
-            $all_ips[] = $proxy_ip_data[0];
-            $proxy_ips[] = $proxy_ip_data[0];
-            $proxy_ips_usernames[] = $linux_username . '@' . $proxy_ip_data[0];
-        } else {
-            echo "Invalid proxy IP format. Please use the format 'username@ip' or 'ip'";;
+        $proxyParsed = parseHostEntry($proxy_ip_input, $linux_username);
+        if ($proxyParsed === null) {
+            echo "Invalid proxy IP format. Please use 'ip', 'ip:port', 'username@ip' or 'username@ip:port'";
             exit;
         }
+        $all_ips[] = $proxyParsed['ip'];
+        $proxy_ips[] = $proxyParsed['ip'];
+        $proxy_ips_usernames[] = $proxyParsed['user'] . '@' . $proxyParsed['ip'];
+        $proxy_ips_ports[] = $proxyParsed['port'];
     }
     foreach ($all_ips as $ip) {
         $ipParts = explode('.', $ip);
@@ -127,6 +181,7 @@ if (isset($_POST['generate'])) {
             $pID = '0' . $pID;
         }
         $proxy_ip_username = $proxy_ips_usernames[$key];
+        $proxy_ssh_port = $proxy_ips_ports[$key];
         $installTxt = file_get_contents('files/install.txt');
         $installTxt = str_replace("linuxuser@proxy_ip", $proxy_ip_username, $installTxt);
         $installTxt = str_replace("cert_path", $ssh_cert_path, $installTxt);
@@ -137,7 +192,14 @@ if (isset($_POST['generate'])) {
         $installTxt = str_replace("files/haproxy.cfg", "files/" . $haproxyFile, $installTxt);
         $installTxt = str_replace("mv haproxy.cfg", "mv " . $haproxyFile, $installTxt);
 
-        $files['p' . $pID . '.txt'] = $installTxt;
+        $installTxt = addSshPortToCommands($installTxt, $proxy_ssh_port);
+        $preamble = generateSshPortChangePreamble(
+            explode('@', $proxy_ip_username)[0],
+            $proxy_ip,
+            $proxy_ssh_port,
+            $ssh_cert_path
+        );
+        $files['p' . $pID . '.txt'] = $preamble . $installTxt;
     }
 
     $installServerTxt = file_get_contents('files/install_server.txt');
@@ -148,7 +210,9 @@ if (isset($_POST['generate'])) {
     $otsInstall = str_replace("server_ip", $ots_ip_address, $otsInstall);
     $otsInstall = str_replace("cert_path", $ssh_cert_path, $otsInstall);
     $otsInstall = str_replace("script_mode", "ots", $otsInstall);
-    $files['ots.txt'] = $otsInstall;
+    $otsInstall = addSshPortToCommands($otsInstall, $ots_ssh_port);
+    $otsPreamble = generateSshPortChangePreamble($ots_ssh_user, $ots_ip_address, $ots_ssh_port, $ssh_cert_path);
+    $files['ots.txt'] = $otsPreamble . $otsInstall;
 
     // WWW
     $wwwCount = 0;
@@ -159,9 +223,11 @@ if (isset($_POST['generate'])) {
         $wwwInstall = str_replace("server_ip", $server['ip'], $wwwInstall);
         $wwwInstall = str_replace("cert_path", $ssh_cert_path, $wwwInstall);
         $wwwInstall = str_replace("script_mode", "www", $wwwInstall);
+        $wwwInstall = addSshPortToCommands($wwwInstall, $server['port']);
+        $wwwPreamble = generateSshPortChangePreamble($server['user'], $server['ip'], $server['port'], $ssh_cert_path);
 
         $fileName = ($wwwCount === 1) ? 'www.txt' : 'www_' . $wwwCount . '.txt';
-        $files[$fileName] = $wwwInstall;
+        $files[$fileName] = $wwwPreamble . $wwwInstall;
     }
 
     $firewallSh = file_get_contents('files/firewall.sh');
@@ -510,20 +576,20 @@ if (isset($_POST['generate'])) {
     </div>
 
     <div class="field">
-        <label for="ots_ip">OTS IP (or user@ip):</label>
+        <label for="ots_ip">OTS IP (or user@ip, ip:port, user@ip:port):</label>
         <input id="ots_ip" name="ots_ip" type="text" placeholder="ubuntu@1.1.1.1"/>
     </div>
 
     <div class="field">
-        <label for="other_ips">Other IPs with unlimited access (ex. www server to let it connect to database) (or user@ip):</label>
+        <label for="other_ips">Other IPs with unlimited access (ex. www server to let it connect to database) (or user@ip, ip:port, user@ip:port):</label>
         <textarea id="other_ips" name="other_ips" rows="2" placeholder="ubuntu@2.2.2.2"></textarea>
     </div>
 
     <div class="field">
-        <label for="proxy_ips_add">Proxy IPs (with username, if it's different for some IPs):</label>
+        <label for="proxy_ips_add">Proxy IPs (with username and/or SSH port, if different for some IPs):</label>
         <div id="proxy_ips_list" class="proxy-list" role="list"></div>
         <div class="proxy-add-row">
-            <input type="text" id="proxy_ips_add" placeholder="ubuntu@1.2.3.4" autocomplete="off">
+            <input type="text" id="proxy_ips_add" placeholder="ubuntu@1.2.3.4:22" autocomplete="off">
             <button type="button" id="proxy_ips_add_btn">Add</button>
         </div>
         <input type="hidden" id="proxy_ips" name="proxy_ips" value="">
@@ -577,10 +643,12 @@ if (isset($_POST['generate'])) {
 
     function extractProxyIp(entry) {
         const at = entry.lastIndexOf('@');
-        if (at !== -1) {
-            return entry.slice(at + 1).trim();
+        var ipPart = (at !== -1) ? entry.slice(at + 1).trim() : entry.trim();
+        var colon = ipPart.lastIndexOf(':');
+        if (colon !== -1) {
+            return ipPart.slice(0, colon);
         }
-        return entry.trim();
+        return ipPart;
     }
 
     function getProxyDuplicateFlags() {
