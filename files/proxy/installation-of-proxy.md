@@ -3,6 +3,7 @@
 1. Upload `proxy` directory to `/home/proxy` on OTS server.
 2. SSH to server, compile and install:
 ```
+sudo apt install -y build-essential cmake libboost-system-dev
 cd /home/proxy/alpha-proxy/
 mkdir build
 cd build
