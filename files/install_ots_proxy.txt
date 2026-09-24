@@ -1,0 +1,6 @@
+scp -r files/proxy linuxuser@server_ip:
+ssh linuxuser@server_ip 'sudo mkdir -p /home/proxy && sudo cp -a ~/proxy/. /home/proxy/ && sudo chown -R linuxuser:linuxuser /home/proxy && rm -rf ~/proxy'
+ssh linuxuser@server_ip 'sudo DEBIAN_FRONTEND=noninteractive apt install -yq build-essential cmake libboost-system-dev screen'
+ssh linuxuser@server_ip 'cd /home/proxy/alpha-proxy && mkdir -p build && cd build && cmake .. && make -j 2 && cp alpha-proxy ../../proxy_server'
+ssh linuxuser@server_ip 'cd /home/proxy && chmod +x *sh'
+ssh linuxuser@server_ip 'cd /home/proxy && ./start.sh'

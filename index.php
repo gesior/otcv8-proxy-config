@@ -206,7 +206,7 @@ if (isset($_POST['generate'])) {
     $installServerTxt = file_get_contents('files/install_server.txt');
 
     // OTS
-    $otsInstall = $installServerTxt;
+    $otsInstall = $installServerTxt . "\n" . file_get_contents('files/install_ots_proxy.txt');
     $otsInstall = str_replace("linuxuser", $ots_ssh_user, $otsInstall);
     $otsInstall = str_replace("server_ip", $ots_ip_address, $otsInstall);
     $otsInstall = str_replace("cert_path", $ssh_cert_path, $otsInstall);
