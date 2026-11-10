@@ -1,5 +1,33 @@
 <?php
 
+function generateHAProxyConfigs($template, $proxyPorts, $otsIpAddress, $statusPort)
+{
+    $proxyLines = [];
+    foreach ($proxyPorts as $key => $proxyPort) {
+        $proxyLines[] = 'listen p' . ($key + 1);
+        $proxyLines[] = '    bind 0.0.0.0:' . $proxyPort;
+        $proxyLines[] = '    server srv1 ' . $otsIpAddress . ':' . $proxyPort . ' send-proxy-v2';
+        $proxyLines[] = '';
+    }
+    $proxyConfigText = implode("\n", $proxyLines);
+
+    $statusLines = [
+            'listen statusport',
+            '    bind 0.0.0.0:' . $statusPort,
+            '    maxconn 100',
+            '    timeout client 5s',
+            '    timeout server 5s',
+            '    server srv1 ' . $otsIpAddress . ':' . $statusPort . ' send-proxy-v2',
+            '',
+    ];
+    $statusConfigText = implode("\n", $statusLines) . "\n" . $proxyConfigText;
+
+    return [
+            'no_status' => str_replace('haproxy_ports_config', $proxyConfigText, $template),
+            'status' => str_replace('haproxy_ports_config', $statusConfigText, $template),
+    ];
+}
+
 function parseHostEntry($entry, $defaultUser)
 {
     $user = $defaultUser;
@@ -245,41 +273,9 @@ if (isset($_POST['generate'])) {
     $files['files/firewall.sh'] = $firewallSh;
 
     $haproxyCfgTemplate = file_get_contents('files/haproxy.cfg');
-
-    // Configuration lines for proxy ports (shared between both configs)
-    $haproxyCfgLinesCommon = [];
-    foreach ($proxy_ports as $key => $proxy_port) {
-        $haproxyCfgLinesCommon[] = 'listen p' . ($key + 1);
-        $haproxyCfgLinesCommon[] = '    bind 0.0.0.0:' . $proxy_port;
-        $haproxyCfgLinesCommon[] = '    mode tcp';
-        $haproxyCfgLinesCommon[] = '    maxconn 300000';
-        $haproxyCfgLinesCommon[] = '    timeout connect  4000';
-        $haproxyCfgLinesCommon[] = '    timeout client   180000';
-        $haproxyCfgLinesCommon[] = '    timeout server   180000';
-        $haproxyCfgLinesCommon[] = '    server srv1 ' . $ots_ip_address . ':' . $proxy_port . ' send-proxy-v2';
-        $haproxyCfgLinesCommon[] = '';
-    }
-    $commonConfigText = implode("\n", $haproxyCfgLinesCommon);
-
-    // Remaining proxies configuration (without status port)
-    $haproxyCfgNoStatus = str_replace("haproxy_ports_config", $commonConfigText, $haproxyCfgTemplate);
-    $files['files/haproxy_no_status.cfg'] = $haproxyCfgNoStatus;
-
-    // First proxy configuration (with status port)
-    $haproxyCfgLinesStatusOnly = [];
-    $haproxyCfgLinesStatusOnly[] = 'listen p0';
-    $haproxyCfgLinesStatusOnly[] = '    bind 0.0.0.0:' . $ots_status_port;
-    $haproxyCfgLinesStatusOnly[] = '    mode tcp';
-    $haproxyCfgLinesStatusOnly[] = '    maxconn 100';
-    $haproxyCfgLinesStatusOnly[] = '    timeout connect  4000';
-    $haproxyCfgLinesStatusOnly[] = '    timeout client   180000';
-    $haproxyCfgLinesStatusOnly[] = '    timeout server   180000';
-    $haproxyCfgLinesStatusOnly[] = '    server srv1 ' . $ots_ip_address . ':' . $ots_status_port . ' send-proxy-v2';
-    $haproxyCfgLinesStatusOnly[] = '';
-
-    $statusConfigText = implode("\n", $haproxyCfgLinesStatusOnly) . "\n" . $commonConfigText;
-    $haproxyCfgStatus = str_replace("haproxy_ports_config", $statusConfigText, $haproxyCfgTemplate);
-    $files['files/haproxy_status.cfg'] = $haproxyCfgStatus;
+    $haproxyConfigs = generateHAProxyConfigs($haproxyCfgTemplate, $proxy_ports, $ots_ip_address, $ots_status_port);
+    $files['files/haproxy_no_status.cfg'] = $haproxyConfigs['no_status'];
+    $files['files/haproxy_status.cfg'] = $haproxyConfigs['status'];
 
     $startShLines = ['#!/bin/bash'];
     foreach ($proxy_ports as $key => $proxy_port) {
